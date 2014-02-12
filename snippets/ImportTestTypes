@@ -1,0 +1,8 @@
+INSERT INTO test_type (parent_test_name, specimen, name, test_category_id, ts)
+SELECT 
+sl.parent_test,
+sl.specimen,
+sl.name,
+(SELECT test_category_id FROM test_category WHERE name = sl.category),
+now()
+FROM sanitas_tests_live2 sl; 

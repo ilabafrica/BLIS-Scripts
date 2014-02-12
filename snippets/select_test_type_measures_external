@@ -1,0 +1,2 @@
+SELECT * FROM measure WHERE measure_id > 196;
+SELECT * FROM test_type WHERE test_type_id > 116;

@@ -1,0 +1,6 @@
+INSERT into measure (name, ts, measure_range)
+SELECT 
+sl.name,
+now(),
+'$freetext$$'
+FROM sanitas_tests_live2 sl;
