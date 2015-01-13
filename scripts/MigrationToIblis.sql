@@ -415,6 +415,14 @@ select test_id,
 from blis_301.test t;
 
 
+-- Migration scripts for test results
+
+INSERT IGNORE INTO iblis.test_results (test_id, measure_id, result, time_entered) 
+SELECT tm.test_id, tm.measure_id, tm.result, t.ts_result_entered FROM blis_301.test_measure tm INNER 
+JOIN blis_301.measure m ON tm.measure_id = m.measure_id LEFT JOIN blis_301.test t ON tm.test_id = t.test_id 
+ORDER BY tm.tm_id;
+
+
 DROP TEMPORARY TABLE IF EXISTS iblis.test_visits;
 DROP TEMPORARY TABLE IF EXISTS iblis.tmp_visits;
 DROP TABLE IF EXISTS blis_301.tmp3;
