@@ -224,7 +224,9 @@ select measure_id,
   WHEN measure_range = ':' THEN '1' 
   ELSE '2' 
 END) as measure_type_id,
-name, measure_range, unit, description, ts
+	name, measure_range, 
+	if (unit is NULL, '', unit) as unit,
+	description, ts
 from blis_301.measure;
 
 
