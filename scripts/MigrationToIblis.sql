@@ -217,16 +217,32 @@ values
 -- Script to migrate measures from old-blis to new blis
 -- 0 warnings
 insert into iblis.measures
-	(id, measure_type_id, name, measure_range, unit, description, created_at)
+	(id, measure_type_id, name, unit, description, created_at)
 select measure_id,
-(case 
-  WHEN measure_range = '$freetext$$' THEN '4' 
-  WHEN measure_range = ':' THEN '1' 
-  ELSE '2' 
+(case
+  WHEN measure_range = '$freetext$$' THEN '4'
+  WHEN measure_range = ':' THEN '1'
+  ELSE '2'
 END) as measure_type_id,
-	name, measure_range, 
+	name,
 	if (unit is NULL, '', unit) as unit,
 	description, ts
+from blis_301.measure;
+
+
+-- MEASURE RANGE MIGRATIONS
+ 
+-- Script to migrate measures ranges from old-blis to new blis
+-- 0 warnings
+-- Numeric Ranges
+insert into iblis.measure_ranges
+	(id, measure_id, age_min, age_max, gender, range_lower, range_upper, interpretation)
+select id, measure_id, age_l, age_u, gender, range_l, range_u, description
+from blis_301.numeric_interpretation;
+-- Alphanumeric Ranges
+insert into iblis.measure_ranges (measure_id, alphanumeric)
+select measure_id, measure_range
+where measure_range like '%/%'
 from blis_301.measure;
 
 
