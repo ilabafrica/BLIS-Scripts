@@ -234,16 +234,12 @@ from blis_301.measure;
  
 -- Script to migrate measures ranges from old-blis to new blis
 -- 0 warnings
--- Numeric Ranges
-insert into iblis.measure_ranges
-	(id, measure_id, age_min, age_max, gender, range_lower, range_upper, interpretation)
-select id, measure_id, age_l, age_u, gender, range_l, range_u, description
-from blis_301.numeric_interpretation;
+-- Numeric Ranges(non has a corresponding measure)
 -- Alphanumeric Ranges
 insert into iblis.measure_ranges (measure_id, alphanumeric)
 select measure_id, measure_range
-where measure_range like '%/%'
-from blis_301.measure;
+from blis_301.measure
+where measure_range like '%/%';
 
 
 -- TEST TYPE MIGRATIONS
