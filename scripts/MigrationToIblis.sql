@@ -1,4 +1,53 @@
- 
+-- RUN THESE ONLY ONCE
+
+-- INDEXING TEST TABLE 
+
+-- Helps improve performance
+
+alter table blis_301.test add index (external_lab_no);
+
+
+-- PRELIMINARY MIGRATION BEFORE MIGRATING REJECTION REASONS AND SPECIMEN
+
+delete from blis_301.rejection_reasons where rejection_reason_id = 32;
+
+insert into blis_301.rejection_reasons (rejection_reason_id, rejection_phase, rejection_code, description, disabled, ts )
+	values (36, 1, 036, 'Machine is out of order', 0, now() ),
+	 (37, 1, 037, 'Test currently not being done', 0, now() ),
+	 (38, 1, 038, 'Sample contaminated', 0, now() ),
+	 (39, 1, 039, 'Empty container, no sample', 0, now() ),
+	 (40, 1, 040, 'Double entry', 0, now() );
+
+update blis_301.specimen set comments = 'Clotted Blood' where comments = 'clotted sample';
+update blis_301.specimen set comments = 'Clotted Blood' where comments = 'blood clotted';
+update blis_301.specimen set comments = 'Machine is out of order' where comments = 'MACHINE IS OUT OF ORDER';
+update blis_301.specimen set comments = 'Sample contaminated' where comments = 'Blood staned';
+update blis_301.specimen set comments = 'Sample contaminated' where comments = 'contaminated';
+update blis_301.specimen set comments = 'Haemolysis' where comments = 'sample heamolysed';
+update blis_301.specimen set comments = 'Haemolysis' where comments = 'haemolysed sample';
+update blis_301.specimen set comments = 'Haemolysis' where comments = 'haemolysed';
+update blis_301.specimen set comments = 'Haemolysis' where comments = 'haemolysed ';
+UPDATE blis_301.specimen SET comments = 'Haemolysis' WHERE `specimen_id`='25424';
+update blis_301.specimen set comments = 'Wrong container/Anticoagulant' where comments = 'sample in purple top';
+update blis_301.specimen set comments = 'Empty container, no sample' where comments = 'no sample empty container';
+update blis_301.specimen set comments = 'Double entry' where comments = 'double entry';
+
+-- Updating the comments that were text into the corresponding id's
+
+update  blis_301.specimen s, blis_301.rejection_reasons rr
+set s.comments = rr.rejection_reason_id
+	where s.comments = rr.description and char_length(s.comments) > 4;
+
+
+-- Dropping unnecessary column and its foreign key
+
+ALTER TABLE `iblis`.`specimens` DROP FOREIGN KEY `specimens_test_phase_id_foreign`;
+ALTER TABLE `iblis`.`specimens` DROP COLUMN `test_phase_id`, DROP INDEX `specimens_test_phase_id_foreign`;
+
+
+
+-- BEGIN ACTUAL MIGRATIONS
+
 -- USER MIGRATIONS
  
 -- Script to migrate users data from old-blis to new blis
@@ -136,38 +185,6 @@ insert into iblis.referrals
 	person, contacts, user_id, ts, null from blis_301.tmp3;
 
 
--- PRELIMINARY MIGRATION BEFORE MIGRATING REJECTION REASONS AND SPECIMEN
-
-delete from blis_301.rejection_reasons where rejection_reason_id = 32;
-
-insert into blis_301.rejection_reasons (rejection_reason_id, rejection_phase, rejection_code, description, disabled, ts )
-	values (36, 1, 036, 'Machine is out of order', 0, now() ),
-	 (37, 1, 037, 'Test currently not being done', 0, now() ),
-	 (38, 1, 038, 'Sample contaminated', 0, now() ),
-	 (39, 1, 039, 'Empty container, no sample', 0, now() ),
-	 (40, 1, 040, 'Double entry', 0, now() );
-
-update blis_301.specimen set comments = 'Clotted Blood' where comments = 'clotted sample';
-update blis_301.specimen set comments = 'Clotted Blood' where comments = 'blood clotted';
-update blis_301.specimen set comments = 'Machine is out of order' where comments = 'MACHINE IS OUT OF ORDER';
-update blis_301.specimen set comments = 'Sample contaminated' where comments = 'Blood staned';
-update blis_301.specimen set comments = 'Sample contaminated' where comments = 'contaminated';
-update blis_301.specimen set comments = 'Haemolysis' where comments = 'sample heamolysed';
-update blis_301.specimen set comments = 'Haemolysis' where comments = 'haemolysed sample';
-update blis_301.specimen set comments = 'Haemolysis' where comments = 'haemolysed';
-update blis_301.specimen set comments = 'Haemolysis' where comments = 'haemolysed ';
-UPDATE blis_301.specimen SET comments = 'Haemolysis' WHERE `specimen_id`='25424';
-update blis_301.specimen set comments = 'Wrong container/Anticoagulant' where comments = 'sample in purple top';
-update blis_301.specimen set comments = 'Empty container, no sample' where comments = 'no sample empty container';
-update blis_301.specimen set comments = 'Double entry' where comments = 'double entry';
-
--- Updating the comments that were text into the corresponding id's
-
-update  blis_301.specimen s, blis_301.rejection_reasons rr
-set s.comments = rr.rejection_reason_id
-	where s.comments = rr.description and char_length(s.comments) > 4;
-
-
 -- REJECTION REASONS SCRIPTS
 
 -- made changes to the rejection reasons thus they need updating 
@@ -198,7 +215,7 @@ insert into iblis.test_categories
 select test_category_id, name, description, ts 
 from blis_301.test_category;
  
- 
+
 -- MEASURE TYPE MIGRATIONS
  
 -- Script to migrate measure types from old-blis to new blis
@@ -224,9 +241,9 @@ select measure_id,
   WHEN measure_range = ':' THEN '1' 
   ELSE '2' 
 END) as measure_type_id,
-	name, measure_range, 
-	if (unit is NULL, '', unit) as unit,
-	description, ts
+name, measure_range, 
+if (unit is NULL, '', unit) as unit,
+description, ts
 from blis_301.measure;
 
 
@@ -237,7 +254,7 @@ from blis_301.measure;
 insert into iblis.test_types
 	(id, name, description, test_category_id, targetTAT, prevalence_threshold, created_at)
 select test_type_id, name, description, test_category_id, target_tat, prevalence_threshold, ts
-from blis_301.test_type;
+from blis_301.test_type where disabled = 0;
  
 -- TESTTYPE MASURE MIGRATIONS
  
@@ -252,6 +269,7 @@ INSERT INTO iblis.test_phases (id, name) VALUES (1, "Pre-Analytical"),(2, "Analy
 
 INSERT INTO iblis.test_statuses(id, name, test_phase_id) VALUES (1, "not-received", 1),
 	(2, "pending", 1),(3, "started", 2),(4, "completed", 3),(5, "verified", 3);
+
 
 
 -- SPECIMEN MIGRATION SCRIPT
@@ -278,28 +296,19 @@ insert into iblis.specimens
 	from blis_301.specimen s;
 
 
-
--- INDEXING TEST TABLE 
-
--- Helps improve performance
-
-alter table blis_301.test add index (patientvisitnumber);
-
-
 -- EXTERNAL LAB REQUEST MIGRATIONS
  
 -- Script to migrate eternal lab requests from old-blis to new blis
 -- To speed up the migration the patientVisitNumber column is made an index first
 -- 0 errors, 0 warnings
 
- 
 insert into iblis.external_dump ( id, labNo, parentLabNo, test_id, requestingClinician, investigation, provisional_diagnosis, 
 		requestDate, orderStage, result, result_returned, patientVisitNumber, patient_id, fullName, dateOfBirth, gender, address, 
 		postalCode, phoneNumber, city, cost, receiptNumber, receiptType, waiver_no, system_id)
-select id, labNo, parentLabNo, blis_301.test.test_id, requestingClinician, investigation, provisionalDiagnosis, requestDate, orderStage, blis_revamp_prod.external_lab_request.result, result_returned, blis_revamp_prod.external_lab_request.patientVisitNumber, patient_id, full_name, dateOfBirth, gender, address, postalCode, phoneNumber, city, cost, receiptNumber, receiptType, waiverNo, system_id
-from blis_revamp_prod.external_lab_request 
-left join blis_301.test
-on (external_lab_request.patientVisitNumber=test.patientVisitNumber)
+select id, labNo, parentLabNo, t.test_id, requestingClinician, investigation, provisionalDiagnosis, requestDate, orderStage, exlr.result, result_returned, exlr.patientVisitNumber, patient_id, full_name, dateOfBirth, gender, address, postalCode, phoneNumber, city, cost, receiptNumber, receiptType, waiverNo, system_id
+from blis_revamp_prod.external_lab_request exlr
+left join blis_301.test t
+on (exlr.labNo = t.external_lab_no)
 group by id;
 
 
@@ -415,14 +424,28 @@ select test_id,
 from blis_301.test t;
 
 
--- Migration scripts for test results
+
+-- MIGRATION SCRIPTS FOR SPECIMEN_TEST TABLE
+
+-- 0 errors
+
+select test_type_id, specimen_type_id from blis_301.specimen_test 
+where test_type_id in (
+select test_type_id from blis_301.test_type where
+	disabled = 0)
+and specimen_type_id != 0;
+
+
+-- MIGRATION SCRIPT FOR TEST RESULTS
+
+-- 0 errors
 
 INSERT IGNORE INTO iblis.test_results (test_id, measure_id, result, time_entered) 
-SELECT tm.test_id, tm.measure_id, tm.result, t.ts_result_entered FROM blis_301.test_measure tm INNER 
-JOIN blis_301.measure m ON tm.measure_id = m.measure_id LEFT JOIN blis_301.test t ON tm.test_id = t.test_id 
-ORDER BY tm.tm_id;
+SELECT tm.test_id, tm.measure_id, tm.result, t.ts_result_entered FROM blis_301.test_measure tm 
+INNER JOIN blis_301.measure m ON tm.measure_id = m.measure_id 
+LEFT JOIN blis_301.test t ON tm.test_id = t.test_id ORDER BY tm.tm_id;
 
-
-DROP TEMPORARY TABLE IF EXISTS iblis.test_visits;
-DROP TEMPORARY TABLE IF EXISTS iblis.tmp_visits;
+DROP TABLE IF EXISTS iblis.test_visits;
+DROP TABLE IF EXISTS iblis.tmp_visits;
 DROP TABLE IF EXISTS blis_301.tmp3;
+DROP PROCEDURE IF EXISTS iblis.explode_table;
