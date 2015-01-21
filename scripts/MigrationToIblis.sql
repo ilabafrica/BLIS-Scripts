@@ -449,3 +449,6 @@ DROP TABLE IF EXISTS iblis.test_visits;
 DROP TABLE IF EXISTS iblis.tmp_visits;
 DROP TABLE IF EXISTS blis_301.tmp3;
 DROP PROCEDURE IF EXISTS iblis.explode_table;
+
+-- STATEMENT TO UPDATE 'timeCreated' in iblis.tests table to pick on 'ts' column in blis_301.specimen table
+UPDATE tests SET time_created = (SELECT ts FROM blis_301.specimen WHERE blis_301.specimen.specimen_id = iblis.tests.specimen_id);
