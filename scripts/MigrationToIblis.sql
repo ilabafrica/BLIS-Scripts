@@ -39,10 +39,8 @@ set s.comments = rr.rejection_reason_id
 	where s.comments = rr.description and char_length(s.comments) > 4;
 
 
--- Dropping unnecessary column and its foreign key
 
-ALTER TABLE `iblis`.`specimens` DROP FOREIGN KEY `specimens_test_phase_id_foreign`;
-ALTER TABLE `iblis`.`specimens` DROP COLUMN `test_phase_id`, DROP INDEX `specimens_test_phase_id_foreign`;
+
 
 
 
@@ -234,14 +232,14 @@ values
 -- Script to migrate measures from old-blis to new blis
 -- 0 warnings
 insert into iblis.measures
-	(id, measure_type_id, name, measure_range, unit, description, created_at)
+	(id, measure_type_id, name, unit, description, created_at)
 select measure_id,
 (case 
   WHEN measure_range = '$freetext$$' THEN '4' 
   WHEN measure_range = ':' THEN '1' 
   ELSE '2' 
 END) as measure_type_id,
-name, measure_range, 
+name, 
 if (unit is NULL, '', unit) as unit,
 description, ts
 from blis_301.measure;
@@ -310,6 +308,15 @@ from blis_revamp_prod.external_lab_request exlr
 left join blis_301.test t
 on (exlr.labNo = t.external_lab_no)
 group by id;
+
+
+-- Inserting external user_id's for sending back results 
+
+-- 0 warnings
+
+insert into iblis.external_users (internal_user_id, external_user_id)
+	select user_id, emr_user_id from blis_revamp_prod.user s inner join iblis.users u on u.id = s.user_id
+		order by user_id asc;
 
 
 -- VISITS migration scripts
@@ -414,7 +421,7 @@ select test_id,
 	user_id as tested_by, -- assumption
 	verified_by,
 	(select doctor from blis_301.specimen s where s.specimen_id = t.specimen_id) as requested_by,
-	ts,
+	(SELECT ts FROM blis_301.specimen WHERE blis_301.specimen.specimen_id = iblis.tests.specimen_id) as time_created,
 	ts_started,
 	ts_result_entered,
 	date_verified,
@@ -424,11 +431,11 @@ select test_id,
 from blis_301.test t;
 
 
-
--- MIGRATION SCRIPTS FOR SPECIMEN_TEST TABLE
+-- MIGRATION SCRIPTS FOR testtype_specimentypes TABLE
 
 -- 0 errors
 
+insert into iblis.testtype_specimentypes(test_Type_id, specimen_type_id)
 select test_type_id, specimen_type_id from blis_301.specimen_test 
 where test_type_id in (
 select test_type_id from blis_301.test_type where
@@ -445,10 +452,50 @@ SELECT tm.test_id, tm.measure_id, tm.result, t.ts_result_entered FROM blis_301.t
 INNER JOIN blis_301.measure m ON tm.measure_id = m.measure_id 
 LEFT JOIN blis_301.test t ON tm.test_id = t.test_id ORDER BY tm.tm_id;
 
+-- Migration for measure_ranges
+
+CREATE TABLE iblis.tmp_ranges(id int not null primary key AUTO_INCREMENT, measure_id int, alphanumeric varchar(500));
+INSERT into iblis.tmp_ranges(measure_id, alphanumeric)
+	select measure_id, measure_range
+	from blis_301.measure
+	where measure_range like '%/%';
+
+
+DELIMITER $$
+CREATE FUNCTION iblis.strSplit(x VARCHAR(65000), delim VARCHAR(12), pos INTEGER) 
+RETURNS VARCHAR(65000)
+BEGIN
+  DECLARE output VARCHAR(65000);
+  SET output = REPLACE(SUBSTRING(SUBSTRING_INDEX(x, delim, pos)
+                 , LENGTH(SUBSTRING_INDEX(x, delim, pos - 1)) + 1)
+                 , delim
+                 , '');
+  IF output = '' THEN SET output = null; END IF;
+  RETURN output;
+END $$
+ 
+CREATE PROCEDURE iblis.MeasureRanges2Alphanumeric()
+BEGIN
+  DECLARE i INTEGER;
+ 
+  SET i = 1;
+  REPEAT
+    INSERT INTO iblis.measure_ranges (measure_id, alphanumeric)
+      SELECT measure_id, strSplit(alphanumeric, '/', i) FROM iblis.tmp_ranges
+      WHERE strSplit(alphanumeric, '/', i) IS NOT NULL ORDER BY measure_id ASC;
+    SET i = i + 1;
+    UNTIL ROW_COUNT() = 0
+  END REPEAT;
+END $$
+DELIMITER ;
+-- Call the procedure
+CALL iblis.MeasureRanges2Alphanumeric;
+
+
+drop function if exists iblis.strSplit;
+drop procedure if exists iblis.MeasureRanges2Alphanumeric;
+DROP TABLE iblis.tmp_ranges;
 DROP TABLE IF EXISTS iblis.test_visits;
 DROP TABLE IF EXISTS iblis.tmp_visits;
 DROP TABLE IF EXISTS blis_301.tmp3;
 DROP PROCEDURE IF EXISTS iblis.explode_table;
-
--- STATEMENT TO UPDATE 'timeCreated' in iblis.tests table to pick on 'ts' column in blis_301.specimen table
-UPDATE tests SET time_created = (SELECT ts FROM blis_301.specimen WHERE blis_301.specimen.specimen_id = iblis.tests.specimen_id);
