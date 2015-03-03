@@ -367,3 +367,167 @@ GROUP BY patient_id, substr(t.ts, 1, 10) ORDER BY t.test_id;
 INSERT INTO iblis.visits (patient_id, visit_type, created_at) 
 SELECT patient_id, 
 IF(order_stage='op','Out-Patient', 'In-Patient')ords, ts created_at FROM iblis.tmp_visits;
+
+ALTER TABLE `iblis`.`tmp_visits` ADD COLUMN `id` INT UNSIGNED NOT NULL AUTO_INCREMENT FIRST, 
+ADD PRIMARY KEY (`id`);
+
+
+
+-- --------------------------------------------------------------------------------
+-- PROCEURE Explode table
+-- Note: Used as a pseudo explode() function, splits |1,3,5 | into separate rows |1|3|5
+-- --------------------------------------------------------------------------------
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS iblis.explode_table $$
+
+CREATE PROCEDURE iblis.explode_table(bound VARCHAR(255))
+
+BEGIN
+
+DECLARE id INT DEFAULT 0;
+DECLARE value TEXT;
+DECLARE occurance INT DEFAULT 0;
+DECLARE i INT DEFAULT 0;
+DECLARE splitted_value INT;
+DECLARE done INT DEFAULT 0;
+DECLARE cur1 CURSOR FOR SELECT tmp_visits.id, tmp_visits.test_ids
+                                  FROM tmp_visits
+                                  WHERE tmp_visits.test_ids != '';
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+DROP TEMPORARY TABLE IF EXISTS test_visits;
+CREATE TEMPORARY TABLE test_visits(
+`visit_id` INT NOT NULL,
+`test_id` INT NOT NULL
+) ENGINE=Memory;
+
+OPEN cur1;
+  read_loop: LOOP
+  FETCH cur1 INTO id, value;
+  IF done THEN
+    LEAVE read_loop;
+  END IF;
+
+  SET occurance = (SELECT LENGTH(value)
+                          - LENGTH(REPLACE(value, bound, ''))
+                          +1);
+  SET i=1;
+  WHILE i <= occurance DO
+    SET splitted_value =
+    (SELECT REPLACE(SUBSTRING(SUBSTRING_INDEX(value, bound, i),
+    LENGTH(SUBSTRING_INDEX(value, bound, i - 1)) + 1), ',', ''));
+
+    INSERT INTO test_visits VALUES (id, splitted_value);
+    SET i = i + 1;
+
+  END WHILE;
+  END LOOP;
+
+
+ CLOSE cur1;
+END; $$
+
+DELIMITER ;
+
+CALL iblis.explode_table(','); 
+
+
+-- TESTS TABLE MIGRATION
+
+-- 0 warnings 0 errors
+
+insert into iblis.tests (id, visit_id, test_type_id, specimen_id, interpretation,
+test_status_id, created_by, tested_by, verified_by, requested_by, time_created, time_started,
+time_completed, time_verified, time_sent, external_id)
+select test_id, 
+  (select visit_id from iblis.test_visits tv where t.test_id = tv.test_id) as visit_id, 
+  test_type_id,
+  specimen_id,
+  comments,
+  (CASE WHEN status_code_id = 3 THEN 4 -- completed
+        WHEN status_code_id = 7 THEN 3  -- started
+        WHEN status_code_id = 9 THEN 5  -- verified
+        WHEN status_code_id = 0 THEN 2  -- pending
+    END) AS test_status_id,
+  user_id as created_by,
+  user_id as tested_by, -- assumption
+  verified_by,
+  (select doctor from blis_302.specimen s where s.specimen_id = t.specimen_id) as requested_by,
+  (SELECT ts FROM blis_302.specimen WHERE blis_302.specimen.specimen_id = t.specimen_id limit 1) as time_created,
+  ts_started,
+  ts_result_entered,
+  date_verified,
+  null,
+  if(external_lab_no = '', null, external_lab_no)
+  
+from blis_302.test t;
+
+-- MIGRATION SCRIPTS FOR testtype_specimentypes TABLE
+
+-- 0 errors
+
+insert into iblis.testtype_specimentypes(test_Type_id, specimen_type_id)
+select test_type_id, specimen_type_id from blis_302.specimen_test 
+where test_type_id in (
+select test_type_id from blis_302.test_type where
+  disabled = 0)
+and specimen_type_id != 0;
+
+
+-- MIGRATION SCRIPT FOR TEST RESULTS
+
+-- 0 errors
+
+INSERT IGNORE INTO iblis.test_results (test_id, measure_id, result, time_entered) 
+SELECT tm.test_id, tm.measure_id, tm.result, t.ts_result_entered FROM blis_302.test_measure tm 
+INNER JOIN blis_302.measure m ON tm.measure_id = m.measure_id 
+LEFT JOIN blis_302.test t ON tm.test_id = t.test_id ORDER BY tm.tm_id;
+
+-- Migration for measure_ranges
+
+CREATE TABLE iblis.tmp_ranges(id int not null primary key AUTO_INCREMENT, measure_id int, alphanumeric varchar(500));
+INSERT into iblis.tmp_ranges(measure_id, alphanumeric)
+  select measure_id, measure_range
+  from blis_302.measure
+  where measure_range like '%/%';
+
+
+DELIMITER $$
+CREATE FUNCTION iblis.strSplit(x VARCHAR(65000), delim VARCHAR(12), pos INTEGER) 
+RETURNS VARCHAR(65000)
+BEGIN
+  DECLARE output VARCHAR(65000);
+  SET output = REPLACE(SUBSTRING(SUBSTRING_INDEX(x, delim, pos)
+                 , LENGTH(SUBSTRING_INDEX(x, delim, pos - 1)) + 1)
+                 , delim
+                 , '');
+  IF output = '' THEN SET output = null; END IF;
+  RETURN output;
+END $$
+ 
+CREATE PROCEDURE iblis.MeasureRanges2Alphanumeric()
+BEGIN
+  DECLARE i INTEGER;
+ 
+  SET i = 1;
+  REPEAT
+    INSERT INTO iblis.measure_ranges (measure_id, alphanumeric)
+      SELECT measure_id, strSplit(alphanumeric, '/', i) FROM iblis.tmp_ranges
+      WHERE strSplit(alphanumeric, '/', i) IS NOT NULL ORDER BY measure_id ASC;
+    SET i = i + 1;
+    UNTIL ROW_COUNT() = 0
+  END REPEAT;
+END $$
+DELIMITER ;
+-- Call the procedure
+CALL iblis.MeasureRanges2Alphanumeric;
+
+
+drop function if exists iblis.strSplit;
+drop procedure if exists iblis.MeasureRanges2Alphanumeric;
+DROP TABLE iblis.tmp_ranges;
+DROP TABLE IF EXISTS iblis.test_visits;
+DROP TABLE IF EXISTS iblis.tmp_visits;
+DROP TABLE IF EXISTS blis_301.tmp3;
+DROP PROCEDURE IF EXISTS iblis.explode_table;
