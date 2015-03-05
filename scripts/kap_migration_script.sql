@@ -250,9 +250,9 @@ insert into iblis.testtype_measures
   ( test_type_id, measure_id)
 select ttm.test_type_id, ttm.measure_id
 from blis_302.test_type_measure ttm
-inner join test_type tt
+inner join blis_302.test_type tt
   on tt.test_type_id=ttm.test_type_id
-join measure m
+join blis_302.measure m
   on m.measure_id=ttm.measure_id;
 
 
@@ -475,20 +475,22 @@ and specimen_type_id != 0;
 
 -- MIGRATION SCRIPT FOR TEST RESULTS
 -- 0 errors
-  CREATE TABLE iblis.tmp_test_results (
-      id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, 
-      test_id INT(6) NOT NULL,
-      measure_id INT(6) NOT NULL,
-      result VARCHAR(60)  NOT NULL,
-      time_entered TIMESTAMP
-  );
+CREATE TABLE iblis.tmp_test_results (
+  id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, 
+  test_id INT(6) NOT NULL,
+  measure_id INT(6) NOT NULL,
+  measure VARCHAR(100)  NOT NULL,
+  result VARCHAR(250)  NOT NULL,
+  time_entered TIMESTAMP
+);
 
-  INSERT INTO iblis.tmp_test_results (test_id, measure_id, result, time_entered);
+INSERT INTO iblis.tmp_test_results (test_id, measure_id, measure, result, time_entered)
 
-    SELECT t.test_id, ttm.measure_id, t.result, t.ts_result_entered FROM blis_302.test t 
-    INNER JOIN blis_302.test_type tt ON t.test_type_id=tt.test_type_id
-    LEFT JOIN blis_302.test_type_measure ttm ON tt.test_type_id = ttm.test_type_id
-    WHERE t.result!='';
+SELECT t.test_id, ttm.measure_id, m.name as measure, t.result, t.ts_result_entered FROM blis_302.test t 
+INNER JOIN blis_302.test_type tt ON t.test_type_id=tt.test_type_id
+LEFT JOIN blis_302.test_type_measure ttm ON tt.test_type_id = ttm.test_type_id
+LEFT JOIN blis_302.measure m ON m.measure_id = ttm.measure_id
+WHERE t.status_code_id!=0;
 --the final test_results table is generated using php
 
 -- MIGRATION SCRIPT FOR MEASURE RANGES
@@ -534,6 +536,7 @@ CALL iblis.MeasureRanges2Alphanumeric;
 drop function if exists iblis.strSplit;
 drop procedure if exists iblis.MeasureRanges2Alphanumeric;
 DROP TABLE IF EXISTS iblis.tmp_ranges;
+DROP TABLE IF EXISTS iblis.tmp_test_results;
 DROP TABLE IF EXISTS iblis.test_visits;
 DROP TABLE IF EXISTS iblis.tmp_visits;
 DROP PROCEDURE IF EXISTS iblis.explode_table;
