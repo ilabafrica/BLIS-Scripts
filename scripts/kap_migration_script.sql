@@ -371,8 +371,6 @@ IF(order_stage='op','Out-Patient', 'In-Patient')ords, ts created_at FROM iblis.t
 ALTER TABLE `iblis`.`tmp_visits` ADD COLUMN `id` INT UNSIGNED NOT NULL AUTO_INCREMENT FIRST, 
 ADD PRIMARY KEY (`id`);
 
-
-
 -- --------------------------------------------------------------------------------
 -- PROCEURE Explode table
 -- Note: Used as a pseudo explode() function, splits |1,3,5 | into separate rows |1|3|5
@@ -396,32 +394,32 @@ DECLARE cur1 CURSOR FOR SELECT tmp_visits.id, tmp_visits.test_ids
                                   WHERE tmp_visits.test_ids != '';
 DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
 
-DROP TEMPORARY TABLE IF EXISTS test_visits;
-CREATE TEMPORARY TABLE test_visits(
+DROP TABLE IF EXISTS test_visits;
+CREATE TABLE test_visits(
 `visit_id` INT NOT NULL,
 `test_id` INT NOT NULL
 ) ENGINE=Memory;
 
 OPEN cur1;
   read_loop: LOOP
-  FETCH cur1 INTO id, value;
-  IF done THEN
-    LEAVE read_loop;
-  END IF;
+    FETCH cur1 INTO id, value;
+    IF done THEN
+      LEAVE read_loop;
+    END IF;
 
-  SET occurance = (SELECT LENGTH(value)
-                          - LENGTH(REPLACE(value, bound, ''))
-                          +1);
-  SET i=1;
-  WHILE i <= occurance DO
-    SET splitted_value =
-    (SELECT REPLACE(SUBSTRING(SUBSTRING_INDEX(value, bound, i),
-    LENGTH(SUBSTRING_INDEX(value, bound, i - 1)) + 1), ',', ''));
+    SET occurance = (SELECT LENGTH(value)
+                            - LENGTH(REPLACE(value, bound, ''))
+                            +1);
+    SET i=1;
+    WHILE i <= occurance DO
+      SET splitted_value =
+      (SELECT REPLACE(SUBSTRING(SUBSTRING_INDEX(value, bound, i),
+      LENGTH(SUBSTRING_INDEX(value, bound, i - 1)) + 1), ',', ''));
 
-    INSERT INTO test_visits VALUES (id, splitted_value);
-    SET i = i + 1;
+      INSERT INTO test_visits VALUES (id, splitted_value);
+      SET i = i + 1;
 
-  END WHILE;
+    END WHILE;
   END LOOP;
 
 
@@ -476,15 +474,24 @@ and specimen_type_id != 0;
 
 
 -- MIGRATION SCRIPT FOR TEST RESULTS
-
 -- 0 errors
+  CREATE TABLE iblis.tmp_test_results (
+      id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, 
+      test_id INT(6) NOT NULL,
+      measure_id INT(6) NOT NULL,
+      result VARCHAR(60)  NOT NULL,
+      time_entered TIMESTAMP
+  );
 
-INSERT IGNORE INTO iblis.test_results (test_id, measure_id, result, time_entered) 
-SELECT tm.test_id, tm.measure_id, tm.result, t.ts_result_entered FROM blis_302.test_measure tm 
-INNER JOIN blis_302.measure m ON tm.measure_id = m.measure_id 
-LEFT JOIN blis_302.test t ON tm.test_id = t.test_id ORDER BY tm.tm_id;
+  INSERT INTO iblis.tmp_test_results (test_id, measure_id, result, time_entered);
 
--- Migration for measure_ranges
+    SELECT t.test_id, ttm.measure_id, t.result, t.ts_result_entered FROM blis_302.test t 
+    INNER JOIN blis_302.test_type tt ON t.test_type_id=tt.test_type_id
+    LEFT JOIN blis_302.test_type_measure ttm ON tt.test_type_id = ttm.test_type_id
+    WHERE t.result!='';
+--the final test_results table is generated using php
+
+-- MIGRATION SCRIPT FOR MEASURE RANGES
 
 CREATE TABLE iblis.tmp_ranges(id int not null primary key AUTO_INCREMENT, measure_id int, alphanumeric varchar(500));
 INSERT into iblis.tmp_ranges(measure_id, alphanumeric)
@@ -526,8 +533,7 @@ CALL iblis.MeasureRanges2Alphanumeric;
 
 drop function if exists iblis.strSplit;
 drop procedure if exists iblis.MeasureRanges2Alphanumeric;
-DROP TABLE iblis.tmp_ranges;
+DROP TABLE IF EXISTS iblis.tmp_ranges;
 DROP TABLE IF EXISTS iblis.test_visits;
 DROP TABLE IF EXISTS iblis.tmp_visits;
-DROP TABLE IF EXISTS blis_301.tmp3;
 DROP PROCEDURE IF EXISTS iblis.explode_table;
