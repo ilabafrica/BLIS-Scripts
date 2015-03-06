@@ -368,8 +368,8 @@ INSERT INTO iblis.visits (patient_id, visit_type, created_at)
 SELECT patient_id, 
 IF(order_stage='op','Out-Patient', 'In-Patient')ords, ts created_at FROM iblis.tmp_visits;
 
-ALTER TABLE `iblis`.`tmp_visits` ADD COLUMN `id` INT UNSIGNED NOT NULL AUTO_INCREMENT FIRST, 
-ADD PRIMARY KEY (`id`);
+ALTER TABLE iblis.tmp_visits ADD COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT FIRST, 
+ADD PRIMARY KEY (id);
 
 -- --------------------------------------------------------------------------------
 -- PROCEURE Explode table
@@ -394,10 +394,10 @@ DECLARE cur1 CURSOR FOR SELECT tmp_visits.id, tmp_visits.test_ids
                                   WHERE tmp_visits.test_ids != '';
 DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
 
-DROP TABLE IF EXISTS test_visits;
-CREATE TABLE test_visits(
-`visit_id` INT NOT NULL,
-`test_id` INT NOT NULL
+DROP TABLE IF EXISTS iblis.test_visits;
+CREATE TABLE iblis.test_visits(
+visit_id INT NOT NULL,
+test_id INT NOT NULL
 ) ENGINE=Memory;
 
 OPEN cur1;
@@ -416,7 +416,7 @@ OPEN cur1;
       (SELECT REPLACE(SUBSTRING(SUBSTRING_INDEX(value, bound, i),
       LENGTH(SUBSTRING_INDEX(value, bound, i - 1)) + 1), ',', ''));
 
-      INSERT INTO test_visits VALUES (id, splitted_value);
+      INSERT INTO iblis.test_visits VALUES (id, splitted_value);
       SET i = i + 1;
 
     END WHILE;
@@ -493,50 +493,10 @@ LEFT JOIN blis_302.measure m ON m.measure_id = ttm.measure_id
 WHERE t.status_code_id!=0;
 -- the final test_results table is generated using php
 
--- MIGRATION SCRIPT FOR MEASURE RANGES
-
-CREATE TABLE iblis.tmp_ranges(id int not null primary key AUTO_INCREMENT, measure_id int, alphanumeric varchar(500));
-INSERT into iblis.tmp_ranges(measure_id, alphanumeric)
-  select measure_id, measure_range
-  from blis_302.measure
-  where measure_range like '%/%';
-
-
-DELIMITER $$
-CREATE FUNCTION iblis.strSplit(x VARCHAR(65000), delim VARCHAR(12), pos INTEGER) 
-RETURNS VARCHAR(65000)
-BEGIN
-  DECLARE output VARCHAR(65000);
-  SET output = REPLACE(SUBSTRING(SUBSTRING_INDEX(x, delim, pos)
-                 , LENGTH(SUBSTRING_INDEX(x, delim, pos - 1)) + 1)
-                 , delim
-                 , '');
-  IF output = '' THEN SET output = null; END IF;
-  RETURN output;
-END $$
- 
-CREATE PROCEDURE iblis.MeasureRanges2Alphanumeric()
-BEGIN
-  DECLARE i INTEGER;
- 
-  SET i = 1;
-  REPEAT
-    INSERT INTO iblis.measure_ranges (measure_id, alphanumeric)
-      SELECT measure_id, strSplit(alphanumeric, '/', i) FROM iblis.tmp_ranges
-      WHERE strSplit(alphanumeric, '/', i) IS NOT NULL ORDER BY measure_id ASC;
-    SET i = i + 1;
-    UNTIL ROW_COUNT() = 0
-  END REPEAT;
-END $$
-DELIMITER ;
--- Call the procedure
-CALL iblis.MeasureRanges2Alphanumeric;
-
-
-drop function if exists iblis.strSplit;
-drop procedure if exists iblis.MeasureRanges2Alphanumeric;
+DROP FUNCTION IF EXISTS iblis.strSplit;
+DROP PROCEDURE IF EXISTS iblis.MeasureRanges2Alphanumeric;
 DROP TABLE IF EXISTS iblis.tmp_ranges;
-DROP TABLE IF EXISTS iblis.tmp_test_results;
+-- DROP TABLE IF EXISTS iblis.tmp_test_results; -- don't php migration needs this
 DROP TABLE IF EXISTS iblis.test_visits;
 DROP TABLE IF EXISTS iblis.tmp_visits;
 DROP PROCEDURE IF EXISTS iblis.explode_table;
