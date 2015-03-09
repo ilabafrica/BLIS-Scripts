@@ -1,3 +1,8 @@
+-- Run the following commands
+-- php artisan migrate
+-- mysql source kap_migration_script.sql(this very script)
+-- php artisan migrate:results(on branch kap-test-results) - migrates results and resets passwords to password
+
 -- USER MIGRATIONS
  
 -- Script to migrate users data from old-blis to new blis
@@ -492,6 +497,17 @@ LEFT JOIN blis_302.test_type_measure ttm ON tt.test_type_id = ttm.test_type_id
 LEFT JOIN blis_302.measure m ON m.measure_id = ttm.measure_id
 WHERE t.status_code_id!=0;
 -- the final test_results table is generated using php
+
+-- diseases for surveillance report
+INSERT INTO iblis.diseases (id, name) VALUES
+(1, 'Malaria'),
+(2, 'Typhoid'),
+(3, 'Shigella Dysentry');
+
+-- test types for diseases on the surveillance report
+INSERT INTO iblis.report_diseases (test_type_id, disease_id) VALUES
+(174, 2),
+(180, 2);
 
 DROP FUNCTION IF EXISTS iblis.strSplit;
 DROP PROCEDURE IF EXISTS iblis.MeasureRanges2Alphanumeric;
