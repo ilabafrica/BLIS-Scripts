@@ -509,6 +509,14 @@ INSERT INTO iblis.report_diseases (test_type_id, disease_id) VALUES
 (174, 2),
 (180, 2);
 
+-- fix distorted measure units
+UPDATE iblis.measures SET unit='x10³/µL' WHERE id=282;
+UPDATE iblis.measures SET unit='x10⁶/µL' WHERE id=283;
+UPDATE iblis.measures SET unit='x10³/µL' WHERE id=289;
+UPDATE iblis.measures SET unit='x10³/µL' WHERE id=293;
+UPDATE iblis.measures SET unit='x10³/µL' WHERE id=294;
+UPDATE iblis.measures SET unit='x10³/µL' WHERE id=295;
+
 DROP FUNCTION IF EXISTS iblis.strSplit;
 DROP PROCEDURE IF EXISTS iblis.MeasureRanges2Alphanumeric;
 DROP TABLE IF EXISTS iblis.tmp_ranges;
